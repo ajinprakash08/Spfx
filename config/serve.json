@@ -1,0 +1,30 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/core-build/serve.schema.json",
+  "port": 4321,
+  "https": true,
+  "serveConfigurations": {
+    "default": {
+      "pageUrl": "https://ajindeveloper.sharepoint.com/SitePages/myPage.aspx",
+      "customActions": {
+        "f40874b4-4acc-4fce-b5e4-653763ebcd1a": {
+          "location": "ClientSideExtension.ApplicationCustomizer",
+          "properties": {
+            "Top": "Test message",
+            "Bottom": "Test message",
+          }
+        }
+      }
+    },
+    "extensionDemo": {
+      "pageUrl": "https://contoso.sharepoint.com/sites/mySite/SitePages/myPage.aspx",
+      "customActions": {
+        "f40874b4-4acc-4fce-b5e4-653763ebcd1a": {
+          "location": "ClientSideExtension.ApplicationCustomizer",
+          "properties": {
+            "testMessage": "Test message"
+          }
+        }
+      }
+    }
+  }
+}
