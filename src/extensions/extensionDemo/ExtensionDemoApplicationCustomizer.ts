@@ -14,17 +14,18 @@ import styles from './AppCustomizer.module.scss';
 import { escape } from '@microsoft/sp-lodash-subset';
 
 const LOG_SOURCE: string = 'ExtensionDemoApplicationCustomizer';
-
+const HEADER_TEXT: string = "This is the top zone";
+const FOOTER_TEXT: string = "This is the bottom zone";
 /**
  * If your command set uses the ClientSideComponentProperties JSON input,
  * it will be deserialized into the BaseExtension.properties object.
  * You can define an interface to describe it.
  */
-export interface IExtensionDemoApplicationCustomizerProperties {
+interface IExtensionDemoApplicationCustomizerProperties {
   // This is an example; replace with your own property
-  Top: string;
-  Bottom: string;
+  TopContent: string;
 }
+
 
 interface IFindTermSetRequest {
   searchTerms: string;
@@ -79,49 +80,104 @@ export default class ExtensionDemoApplicationCustomizer
       sp.setup({
         spfxContext: this.context
       });
-      console.log("OnInit ran.");
+      //console.log("OnInit ran.");
     });
     //return Promise.resolve();
   }
 
+  
+
   private _renderPlaceHolder(): void {
-    console.log("term data1");
-    this.getChildTermsInTermWithPaging();
-      
-    
+    console.log("term data124422");
+    // usage:
+    this.getTermsetWithChildren(
+      'https://ajindeveloper.sharepoint.com/',
+      'Taxonomy_SkzIIXWk3+at2Pc/WQGciA==',
+      'de41fdc4-56d4-4eb9-ab43-fc45df193718'
+    ).then(data => {
+      console.log("got term data");
+      console.log(data);
+      // top placeholder..
+      let topPlaceholder: PlaceholderContent = this.context.placeholderProvider.tryCreateContent(PlaceholderName.Top);
+      if (topPlaceholder) {
+      let nav='<ul>';
+        (data as any[]).forEach((ele)=>{
+          nav+='<li><a href="#'+ele.Name+'">'+ele.Name+'</a></li>';
+        });
+        nav+="</ul>";
+        topPlaceholder.domElement.innerHTML = `<div class="${styles.app}">
+                  <div class="ms-bgColor-themeDark ms-fontColor-white ${styles.top}">
+                    `+nav+`
+                  </div>
+                </div>`;
+      }
+
+      // bottom placeholder..
+      let bottomPlaceholder: PlaceholderContent = this.context.placeholderProvider.tryCreateContent(PlaceholderName.Bottom);
+      if (bottomPlaceholder) {
+        bottomPlaceholder.domElement.innerHTML = `<div class="${styles.app}">
+                  <div class="ms-bgColor-themeDark ms-fontColor-white ${styles.bottom}">
+                    <i class="ms-Icon ms-Icon--Info" aria-hidden="true"></i>&nbsp; ${escape(FOOTER_TEXT)}
+                  </div>
+                </div>`;
+      }
+    });
+
+
   }
   private _onDispose(): void {
     console.log('[ExtensionDemoApplicationCustomizer._onDispose]');
   }
-  
-  private getChildTermsInTermWithPaging() {
-    const url = "https://ajindeveloper.sharepoint.com/"+ '/_vti_bin/TaxonomyInternalService.json/GetChildTermsInTermWithPaging';
-    const query: IGetChildTermsInTermWithPagingRequest = {
-      lcid: 1033,
-      sspId: "75aa5f8d37e54e06bfda215863dfb824", //id of termstore
-      guid: "75aa5f8d37e54e06bfda215863dfb824", //id of term
-      termsetId: "de41fdc4-56d4-4eb9-ab43-fc45df193718", //id of termset
-      includeDeprecated: false,
-      pageLimit: 1000,
-      pagingForward: false,
-      includeCurrentChild: true,
-      currentChildId: "00000000-0000-0000-0000-000000000000",
-      webId: "00000000-0000-0000-0000-000000000000",
-      listId: "00000000-0000-0000-0000-000000000000"
-    };
 
-    this.context.spHttpClient.post(url, SPHttpClient.configurations.v1, {
-      body: JSON.stringify(query)
-    }).then((response: HttpClientResponse) => {
-      if (response.ok) {
-        response.json().then((result: any) => {
-          let returnResults: ITerm[] = [];
-          console.log( result.d);
+  private getTermsetWithChildren(siteCollectionURL: string, termStoreName: string, termsetId: string) {
+    console.log("term data2");
+    return new Promise((resolve, reject) => {
+      const taxonomy = new Session(siteCollectionURL);
+      const store: any = taxonomy.termStores.getByName(termStoreName);
+      console.log(store);      
+      store.getTermSetById(termsetId).terms.select('Name', 'Id', 'Parent').get()
+        .then((data: any[]) => {
+          console.log("got term data");
+          let result = [];
+          // build termset levels
+          do {
+            for (let index = 0; index < data.length; index++) {
+              let currTerm = data[index];
+              if (currTerm.Parent) {
+                let parentGuid = currTerm.Parent.Id;
+                insertChildInParent(result, parentGuid, currTerm, index);
+                index = index - 1;
+              } else {
+                data.splice(index, 1);
+                index = index - 1;
+                result.push(currTerm);
+              }
+            }
+          } while (data.length !== 0);
+          // recursive insert term in parent and delete it from start data array with index
+          function insertChildInParent(searchArray, parentGuid, currTerm, orgIndex) {
+            searchArray.forEach(parentItem => {
+              if (parentItem.Id == parentGuid) {
+                if (parentItem.children) {
+                  parentItem.children.push(currTerm);
+                } else {
+                  parentItem.children = [];
+                  parentItem.children.push(currTerm);
+                }
+                data.splice(orgIndex, 1);
+              } else if (parentItem.children) {
+                // recursive is recursive is recursive
+                insertChildInParent(parentItem.children, parentGuid, currTerm, orgIndex);
+              }
+            });
+          }
+          resolve(result);
+        }).catch(fail => {
+          console.warn(fail);
+          reject(fail);
         });
-      } else {
-        console.log(response.statusText);
-      }
     });
   }
+
 
 }
