@@ -1,3 +1,5 @@
+yo @microsoft/sharepoint
+
 ## extensiondemo
 
 This is where you include your WebPart documentation.
