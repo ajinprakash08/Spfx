@@ -1,5 +1,9 @@
 yo @microsoft/sharepoint
 
+For deployment
+gulp bundle --ship
+gulp package-solution --ship
+
 ## extensiondemo
 
 This is where you include your WebPart documentation.
