@@ -1,0 +1,129 @@
+// Updated script to include full demand form in the SPFx Web Part
+// Enhanced to auto-select department based on user profile property
+
+import * as React from 'react';
+import { sp } from "@pnp/sp/presets/all";
+import {
+  TextField,
+  Dropdown,
+  IDropdownOption,
+  PrimaryButton,
+  PeoplePicker,
+  NormalPeoplePicker
+} from '@fluentui/react';
+
+export default function DemandForm() {
+  const [departments, setDepartments] = React.useState<IDropdownOption[]>([]);
+  const [sections, setSections] = React.useState<any[]>([]);
+  const [filteredSections, setFilteredSections] = React.useState<IDropdownOption[]>([]);
+  const [selectedDept, setSelectedDept] = React.useState<IDropdownOption | null>(null);
+  const [selectedSection, setSelectedSection] = React.useState<IDropdownOption | null>(null);
+  const [currentUserDept, setCurrentUserDept] = React.useState<string>('');
+  const [isITUser, setIsITUser] = React.useState(false);
+
+  const [formData, setFormData] = React.useState({
+    title: '',
+    proposedSolution: '',
+    demandDriver: '',
+    driverReasoning: '',
+    problemStatement: '',
+    demandScope: '',
+    processesInScope: '',
+    infoClassification: '',
+    sme: [],
+  });
+
+  React.useEffect(() => {
+    sp.profiles.myProperties.get().then(profile => {
+      const dept = profile.UserProfileProperties.find(p => p.Key === 'Department')?.Value || '';
+      setCurrentUserDept(dept);
+
+      sp.web.lists.getByTitle("Departments").items.get().then(data => {
+        const deptOptions = data.map(d => ({ key: d.Id, text: d.Title }));
+        setDepartments(deptOptions);
+
+        const match = deptOptions.find(d => d.text === dept);
+        if (match) setSelectedDept(match);
+      });
+    });
+
+    sp.web.currentUser.get().then(user => {
+      setIsITUser(user.Email.includes('it@qia.qa') || user.LoginName.includes('IT'));
+    });
+
+    sp.web.lists.getByTitle("SubSections").items.select("Title", "Id", "Department/Id").expand("Department").get().then(data => {
+      setSections(data);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (selectedDept) {
+      setFilteredSections(sections
+        .filter(s => s.Department?.Id === selectedDept.key)
+        .map(s => ({ key: s.Id, text: s.Title })));
+    }
+  }, [selectedDept, sections]);
+
+  const handleSubmit = async () => {
+    await sp.web.lists.getByTitle("Demands").items.add({
+      Title: formData.title,
+      ProposedSolution: formData.proposedSolution,
+      DemandDriver: formData.demandDriver,
+      DriverReasoning: formData.driverReasoning,
+      BusinessProblem: formData.problemStatement,
+      DemandScope: formData.demandScope,
+      ProcessesInScope: formData.processesInScope,
+      InfoClassification: formData.infoClassification,
+      RequestingDeptId: selectedDept?.key,
+      RequestingSectionId: selectedSection?.key,
+      SMEId: { results: formData.sme.map(p => p.id) }
+    });
+    alert('Demand Submitted');
+  };
+
+  return (
+    <div>
+      <TextField label="Demand Title" onChange={(_, val) => setFormData({ ...formData, title: val || '' })} />
+      <TextField label="Proposed Solution" multiline rows={3} onChange={(_, val) => setFormData({ ...formData, proposedSolution: val || '' })} />
+      <Dropdown label="Demand Driver" options={[
+        { key: 'Mandatory', text: 'Mandatory' },
+        { key: 'Strategy', text: 'Strategy' },
+        { key: 'Risk Driven', text: 'Risk Driven' },
+        { key: 'Opportunity', text: 'Opportunity' }
+      ]} onChange={(_, option) => setFormData({ ...formData, demandDriver: option?.key as string })} />
+      <TextField label="Driver Reasoning" multiline rows={2} onChange={(_, val) => setFormData({ ...formData, driverReasoning: val || '' })} />
+      <TextField label="Business Problem Statement" multiline rows={2} onChange={(_, val) => setFormData({ ...formData, problemStatement: val || '' })} />
+      <TextField label="Demand Scope/Description" multiline rows={3} onChange={(_, val) => setFormData({ ...formData, demandScope: val || '' })} />
+      <TextField label="Business Processes in Scope" multiline rows={2} onChange={(_, val) => setFormData({ ...formData, processesInScope: val || '' })} />
+      <Dropdown label="Business Information Classification" options={[
+        { key: 'C4', text: 'C4; Secret or Top Secret' },
+        { key: 'C3', text: 'C3; Confidential' },
+        { key: 'C2', text: 'C2; Sensitive' },
+        { key: 'C1', text: 'C1; Internal' },
+        { key: 'C0', text: 'C0; Public' }
+      ]} onChange={(_, option) => setFormData({ ...formData, infoClassification: option?.key as string })} />
+
+      {isITUser ? (
+        <>
+          <Dropdown label="Requesting Department" options={departments} selectedKey={selectedDept?.key} onChange={(_, option) => setSelectedDept(option)} />
+          <Dropdown label="Requesting Section" options={filteredSections} onChange={(_, option) => setSelectedSection(option)} />
+        </>
+      ) : (
+        <>
+          <TextField label="Requesting Department" readOnly value={currentUserDept} />
+        </>
+      )}
+
+      <NormalPeoplePicker
+        onResolveSuggestions={filterText => sp.web.siteUsers.filter(`startswith(Title,'${filterText}')`).get().then(users => users.map(u => ({ key: u.Id, text: u.Title, id: u.Id })))}
+        onChange={(items) => setFormData({ ...formData, sme: items })}
+        pickerSuggestionsProps={{ suggestionsHeaderText: 'Suggested People', noResultsFoundText: 'No results found' }}
+        itemLimit={3}
+        resolveDelay={300}
+        defaultSelectedItems={formData.sme}
+      />
+
+      <PrimaryButton text="Submit" onClick={handleSubmit} />
+    </div>
+  );
+}
